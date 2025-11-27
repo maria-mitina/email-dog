@@ -1,24 +1,22 @@
 import unittest
-from unittest.mock import patch
 from agents.planner import PlannerAgent
+from services.session import SessionService
 
 class TestPlannerAgent(unittest.TestCase):
-    @patch('agents.planner.PlannerAgent._get_objectives')
-    def test_planner_agent_run(self, mock_get_objectives):
+    def test_planner_agent_run(self):
         """
         Tests the run method of the PlannerAgent with mocked data.
         """
-        mock_get_objectives.return_value = [
-            {"id": "objective1", "thread_id": "thread1", "status": "processed", "summary": "Summary of thread1", "constraints": {"topic": "project discussion"}}
-        ]
+        session_service = SessionService()
+        session_service.update_objective({"id": "objective1", "thread_id": "thread1", "status": "processed", "summary": "Summary of thread1", "constraints": {"topic": "project discussion"}})
         
-        planner_agent = PlannerAgent()
+        planner_agent = PlannerAgent(session_service)
         planner_agent.run()
         
-        mock_get_objectives.assert_called_once()
-        # Add more assertions here to verify the logic of _decide_next_step and _update_objective
-        # For example, you could check the updated objective in a mock session service
-        self.assertTrue(True)
+        # Assert that the objective has been updated
+        updated_objective = session_service.get_objective("objective1")
+        self.assertEqual(updated_objective['status'], 'planned')
+        self.assertEqual(updated_objective['next_step'], 'draft_email')
 
 if __name__ == "__main__":
     unittest.main()
