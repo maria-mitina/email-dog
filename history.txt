@@ -1,0 +1,528 @@
+Problem Statement
+
+Knowledge workers and busy individuals spend an enormous amount of time in their inboxes: reading, replying, nudging people, chasing confirmations, and stitching multi-step conversations together. Most of this work is coordination, not deep thinking — but it still requires careful context tracking and can’t easily be delegated without a human assistant.
+
+Typical email tools (filters, templates, autocomplete) only help with single messages. They don’t solve the real pain:
+
+Many goals require multiple emails over days or weeks (e.g., booking a service, scheduling a meeting, resolving a support issue).
+
+Important threads silently stall when someone doesn’t reply, and the sender has to remember to follow up.
+
+Context is fragmented across labels, threads, and drafts, making it hard to see “Where are we on this?” for any given objective.
+
+People are busy and distracted; they want outcomes (“get this done”), not another todo list to manage in their inbox.
+
+E-Mail Dog aims to solve this by turning email from a stream of messages into a set of clear objectives (“Book annual car service for 20/11/25 or 24/11/25; full service + pre-NCT”) and then working systematically through the conversations needed to achieve them. The user defines the goal once; the system handles the tedious back-and-forth, reminders, and follow-ups — while staying fully under the user’s control inside Gmail.
+
+This is important because email is still the backbone of professional communication, and even small reductions in inbox overhead compound into hours saved and fewer dropped balls for busy people.
+
+Why agents?
+
+Agents are the right fit because the core problem is not “write me a nice one-off email”; it’s “pursue this goal over time through email.” That’s exactly what an agent is good at.
+
+Concretely, agents enable E-Mail Dog to:
+
+Be goal-driven, not message-driven
+The user sets an objective once. The agent maintains an internal notion of “current status” for that objective (e.g., waiting for confirmation, need to propose new dates, need to follow up), and every email it drafts is in service of moving that objective forward.
+
+Act over time, not just in a single call
+Many email workflows involve delays and dependencies: you send something, wait days, get a partial reply, need to clarify, then confirm. A stateless LLM call can’t “remember” to re-engage when a reply lands. An agent can watch labeled threads (“Autopilot InProgress”), react to new messages, and decide when to follow up or escalate.
+
+Manage multi-step workflows across threads
+One objective might touch multiple people or threads (e.g., comparing quotes from several providers). An agent can keep track of which steps are done, which are pending, and which require new outreach — something that’s hard to model with simple rules or templates.
+
+Adapt to messy, real-world email
+Recipients don’t always do what you expect: they answer partially, introduce new constraints, change dates, or switch language/tone. An agent can re-interpret the latest message, update its understanding of the objective’s state, and generate the next best action — rather than following brittle, pre-defined rules.
+
+Stay user-aligned and explainable
+Because E-Mail Dog operates inside Gmail with explicit labels and user-defined objectives, the agent can always:
+
+Reiterate the objective in each new email until it’s met.
+
+Show clearly which emails it’s acting on.
+
+Keep the user in the loop so they can approve, adjust, or stop the agent at any time.
+
+In short, the problem is long-running, contextual, and outcome-oriented. Agents bring persistence, memory, and autonomy to handle exactly that kind of work — turning E-Mail Dog into a true “no-hassle assistant” rather than just a smarter autocomplete.
+
+You said:
+answer this question: 
+
+### What you created -- What's the overall architecture? 
+ChatGPT said:
+Thought for 7s
+
+Here’s how I’d describe the architecture of E-Mail Dog at a high level:
+
+What you created — overall architecture
+
+E-Mail Dog is built as a goal-oriented agent layer on top of Gmail, with a small web app for control and oversight and a backend that syncs email, manages objectives, and runs agents.
+
+You can think of it as four main pieces:
+
+Gmail integration & sync layer
+
+Objectives & state management
+
+Agent runtime (email-thinking brain)
+
+Web app / control surface for the user
+
+1. Gmail integration & sync layer
+
+This is everything that connects E-Mail Dog to the user’s existing Gmail account:
+
+Google OAuth sign-in
+Users register on URL XXXX using their Google account and agree to the terms. The app requests the minimum necessary Gmail scopes to:
+
+Read messages and labels
+
+Create/update drafts and send messages
+
+Read/write labels (including “Autopilot InProgress”)
+
+Label-based selection
+In Gmail, the user:
+
+Creates the label Autopilot InProgress
+
+Applies it to any threads (in Inbox, Sent, or Drafts) where they want help
+The sync layer watches for threads with this label and treats them as “eligible for automation.”
+
+Sync service
+A backend service periodically:
+
+Pulls labeled threads and their metadata (participants, subject, last message, labels)
+
+Normalizes them into an internal format
+
+Keeps status in sync if labels or message states change in Gmail
+
+This layer turns “Gmail + labels” into a structured list of candidate conversations for the agent to work on.
+
+2. Objectives & state management
+
+Inside the E-Mail Dog backend, the core entities are:
+
+Objective
+Created by the user in the app, e.g.:
+
+“Book annual car service for 20/11/25 or 24/11/25. Make sure it is full service and pre-NCT is also done.”
+
+Each objective is linked to one or more Gmail threads that have the Autopilot InProgress label.
+
+Conversation state
+For each objective, the system tracks:
+
+The associated threads and participants
+
+Current status (e.g. Drafting outreach, Waiting for reply, Need clarification, Goal achieved)
+
+Agent’s internal notes or condensed context (summaries, constraints, deadlines)
+
+Persistence
+All of this lives in a database so the agent can:
+
+Load the current state when a new email arrives or a user updates the objective
+
+Update the state after it decides the next step (e.g., “follow-up sent, now waiting again”)
+
+This layer is what lets the system be goal-driven and long-running, rather than “one prompt, one reply.”
+
+3. Agent runtime (the “autopilot” brain)
+
+On top of the stored state and synced emails, there’s an agent loop that actually thinks and writes:
+
+Triggering
+The agent is invoked when:
+
+A new message arrives in a labeled thread
+
+The user creates/updates an objective
+
+A scheduled check says a follow-up might be needed (e.g., no reply after X days)
+
+Context construction
+Before each decision, the runtime builds a compact context for the LLM:
+
+Objective text
+
+Short summary of the thread so far
+
+Latest incoming message
+
+Current status and any constraints (dates, options, conditions)
+
+Decision & generation
+The agent decides:
+
+Whether to send a new message, draft a reply, or wait
+
+How to phrase the response:
+
+Match language + tone of the last incoming message
+
+Reiterate the objective if it’s not yet achieved
+
+Avoid inventing facts or attachments
+
+It then returns an HTML email body fragment that the backend turns into either:
+
+A Gmail draft (for user review), or
+
+A sent message (if the workflow is configured to auto-send).
+
+Status update
+After acting, the agent updates the objective’s state (e.g. “Message sent; waiting for confirmation on proposed dates”).
+
+This runtime is where the “agent” behavior lives: observing, reasoning over context, choosing actions, and iterating until the objective is done.
+
+4. Web app / control surface
+
+The product’s front door is a lightweight web app hosted at URL XXXX:
+
+Dashboard of objectives & threads
+Shows:
+
+All objectives
+
+Their linked email threads
+
+Current status and key next step (e.g., “Waiting for garage to confirm 24/11/25”)
+
+Objective editor
+For each labeled thread, the user can:
+
+Select which emails to put under E-Mail Dog
+
+Write or refine the objective in natural language
+
+Save it to kick off the agent
+
+Review & control
+Depending on the chosen workflow, the user can:
+
+Review drafts before sending
+
+See what the agent did and why (via summaries)
+
+Pause/stop E-Mail Dog on a thread by removing the label or disabling the objective
+
+This UI layer keeps the system transparent and user-controlled, even though the agent is handling most of the grunt work.
+
+Putting it all together (end-to-end flow)
+
+User signs in with Google and connects Gmail.
+
+User creates the label Autopilot InProgress in Gmail and applies it to relevant threads.
+
+Backend sync layer detects these labeled threads and exposes them in the E-Mail Dog app.
+
+User selects a thread in the app and writes an objective (e.g., “Book service on these dates…”).
+
+Objective + thread(s) are stored; agent runtime starts managing that objective.
+
+Whenever something happens (new email, time-based reminder, objective update), the agent:
+
+Reads the latest context
+
+Decides the next step
+
+Generates a reply (HTML fragment)
+
+Sends or drafts it via Gmail API
+
+Updates the state and waits for the next signal.
+
+The user can always see, tweak, or stop what’s going on from the web app and Gmail labels.
+
+That’s the overall architecture: Gmail + labels as the substrate, a stateful objectives layer, an LLM-based agent loop on top, and a small web app for humans to stay in charge.
+
+You said:
+shorter - in 250 words
+ChatGPT said:
+
+E-Mail Dog is a goal-driven agent layer on top of Gmail with a small web app for control.
+
+1. Gmail integration & sync
+Users sign in with Google and grant Gmail access. In Gmail they create and use the label Autopilot InProgress. A backend sync service continuously reads labeled threads (Inbox, Sent, Drafts), normalizes them, and keeps state aligned with Gmail labels and message changes.
+
+2. Objectives & state
+In the E-Mail Dog web app, users attach objectives (e.g. “Book annual car service on 20/11/25 or 24/11/25, full service + pre-NCT”) to these labeled threads. The backend tracks, per objective:
+
+Linked threads and participants
+
+Status (drafting, waiting for reply, need follow-up, done)
+
+Summaries and constraints
+
+All of this is persisted so progress is maintained across days/weeks.
+
+3. Agent runtime
+An agent loop is triggered by:
+
+New incoming messages in labeled threads
+
+Objective creation/updates
+
+Time-based checks for follow-ups
+
+It builds a compact context (objective, thread summary, latest message, status), decides what to do (reply, follow up, wait), then generates an HTML email body fragment matching the thread’s language and tone. The backend turns this into a Gmail draft or a sent message and updates the objective’s status.
+
+4. Web app / control surface
+The web app shows objectives, their threads, and current status, and lets users:
+
+Define or refine objectives
+
+Select which threads are automated
+
+Review drafts, monitor progress, or stop automation
+
+Overall: Gmail + labels as infrastructure, a persistent objectives layer, and an LLM agent loop orchestrated through a simple web UI.
+
+You said:
+now look at this kaggle course below and we will be generating code for the app which we have designed above but using agents:
+
+In your submission, you must demonstrate what you’ve learned in this course by applying at least three (3) of the key concepts listed below:
+
+Multi-agent system, including any combination of:
+Agent powered by an LLM
+Parallel agents
+Sequential agents
+Loop agents
+Tools, including:
+MCP
+custom tools
+built-in tools, such as Google Search or Code Execution
+OpenAPI tools
+Long-running operations (pause/resume agents)
+Sessions & Memory
+Sessions & state management (e.g. InMemorySessionService)
+Long term memory (e.g. Memory Bank)
+Context engineering (e.g. context compaction)
+Observability: Logging, Tracing, Metrics
+Agent evaluation
+A2A Protocol
+Agent deployment
+ChatGPT said:
+
+Nice, this is a perfect setup for turning E-Mail Dog into a “course-ready” agents project.
+
+Since you haven’t asked for specific code yet, I’ll first align our app with the Kaggle requirements so that when we do write code, we’re ticking all the right boxes.
+
+Below is a concrete agent-based architecture for E-Mail Dog that uses multiple of those concepts.
+
+1. Multi-agent system
+
+We can split E-Mail Dog into three cooperating agents:
+
+Intake Agent (LLM agent, sequential start)
+
+Watches new/updated threads + user objectives.
+
+Cleans and normalizes the objective (e.g., “Book annual car service…”)
+
+Does context compaction: generates a short summary of the thread + extracts constraints (dates, locations, deadlines).
+
+Passes a structured state object to the next agent.
+
+Planner Agent (LLM agent, loop + memory)
+
+Takes the current state and decides the next step:
+
+“Send initial outreach”
+
+“Clarify constraints”
+
+“Wait X days”
+
+“Send follow-up”
+
+Runs in a loop pattern until the objective is marked done (or paused).
+
+Uses session state (e.g., InMemorySessionService / DB) to remember history for this objective.
+
+Email Writer Agent (LLM agent, tool-heavy)
+
+Given a “step” from Planner, drafts the actual email HTML fragment:
+
+Matches language and tone of the last incoming email
+
+Reiterates the objective until achieved
+
+Calls tools to create Gmail drafts / send messages.
+
+Flow: Intake Agent → Planner Agent ↔ (loop) → Email Writer Agent.
+
+This satisfies: agent powered by LLM, sequential agents, loop agent, multi-agent system.
+
+2. Tools
+
+We’ll explicitly model tools that the agents call:
+
+Custom Tools
+
+fetch_threads(label="Autopilot InProgress")
+
+get_thread_summary(thread_id)
+
+update_objective_status(objective_id, status)
+
+schedule_followup(objective_id, datetime)
+
+OpenAPI / built-in style tools
+
+gmail.listThreads, gmail.getThread, gmail.createDraft, gmail.sendEmail
+
+clock.now() / scheduler for follow-ups
+
+Optionally, a code execution tool to transform dates, parse times, etc.
+
+In code, these can be implemented as:
+
+MCP / OpenAPI-described tools, or
+
+Custom Python/TypeScript functions registered as tools with the agents runtime.
+
+This covers: custom tools + built-in / OpenAPI tools.
+
+3. Sessions & Memory
+
+We’ll use sessions per objective:
+
+Session = one objective + its linked threads
+
+session_id = objective_id
+
+State includes:
+
+Objective text
+
+Current status
+
+Compact conversation summary
+
+Last action taken (and when)
+
+Session service
+
+For Kaggle/OpenAI-style patterns, we can wire a SessionService (e.g. InMemorySessionService for demo; DB-backed in real app).
+
+Each agent call loads and updates this session.
+
+Long-term memory (optional extension)
+
+Memory Bank / DB table for:
+
+Past successful bookings
+
+Common providers per user
+
+Planner Agent can query this to improve future automation.
+
+This satisfies: sessions & state management, long-term memory.
+
+4. Long-running operations (pause / resume)
+
+Objectives are naturally long-running: days/weeks.
+
+Planner Agent marks status as:
+
+WAITING_FOR_REPLY_UNTIL=2025-11-30
+
+The system scheduler wakes the Planner Agent when:
+
+A new email arrives or
+
+The wait time expires (for follow-up).
+
+We can also support pause/resume:
+
+paused = true on the objective → agent skips it.
+
+User flips it back to paused = false → agent resumes from saved session state.
+
+This demonstrates: long-running operations, pause/resume agents.
+
+5. Context engineering (context compaction)
+
+Because email threads get long, we’ll explicitly implement:
+
+Thread summarizer tool (used by Intake or Planner Agent):
+
+Produces a rolling summary like:
+
+“Garage offered 20/11/25 at 10:00 or 24/11/25 at 14:00, waiting for user confirmation.”
+
+Constraint extractor:
+
+Extracts structured fields: {dates, location, type_of_service, must_include_preNCT}.
+
+Agents then use:
+
+Summary + latest message + constraints
+instead of the full raw thread, which is context compaction.
+
+6. Observability
+
+For Kaggle, we can instrument:
+
+Logging
+
+Each agent call logs:
+
+agent_name
+
+session_id
+
+action_type (plan, draft, send, wait)
+
+Any tool calls.
+
+Tracing
+
+Trace per objective:
+
+Step 1: Intake
+
+Step 2: Plan
+
+Step 3: Draft
+
+Step 4: Send
+
+Great for showing “how the agent thought.”
+
+Metrics
+
+Time to objective completion
+
+Number of emails per objective
+
+Follow-up success rate
+
+This covers: observability: logging, tracing, metrics.
+
+7. Agent evaluation (for the course write-up)
+
+We can define a simple evaluation harness:
+
+Take a few sample objectives + synthetic email threads.
+
+Run Planner + Email Writer.
+
+Evaluate on:
+
+Did the reply restate the objective clearly?
+
+Did it propose valid dates?
+
+Did it follow up after the right delay?
+
+Even a lightweight scripted evaluation is enough to demonstrate: agent evaluation.
+
+If you tell me your preferred language + framework (Python vs JS/TS; OpenAI Agents, LangChain, or plain API), I can next:
+
+Propose concrete class/function skeletons, and
+
+Generate ready-to-paste code for the multi-agent system that clearly checks off at least 3 (actually more like 6–7) of the required concepts.

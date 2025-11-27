@@ -1,0 +1,15 @@
+# LangChain and OpenAI for agent development
+langchain
+openai
+langchain-openai
+
+# Google API for Gmail integration
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# Pydantic for data models
+pydantic
+
+# Testing
+pytest
